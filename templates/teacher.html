@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>霖楓學苑 — 教師管理後台</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.75rem; margin-bottom: 2rem; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; box-shadow: var(--shadow); }
+  .stat-card .label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+  .stat-card .value { font-size: 1.5rem; font-weight: 700; color: var(--blue); }
+  .stat-card.total { border-left: 4px solid var(--blue); }
+  .section-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.75rem; color: var(--blue); }
+  .teacher-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .teacher-panel { flex: 1; min-width: 320px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); margin-bottom: 1.5rem; }
+  .teacher-panel h3 { font-size: 0.95rem; margin-bottom: 0.75rem; }
+  .form-group { margin-bottom: 0.75rem; }
+  .form-group label { display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+  .form-group select, .form-group input { width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 0.85rem; background: var(--card); }
+  .search-results { max-height: 500px; overflow-y: auto; margin-top: 0.75rem; }
+  .search-row { font-size: 0.82rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
+  .search-row .qid { color: var(--text-muted); margin-right: 0.5rem; }
+  .result-count { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+  .gen-result { margin-top: 0.75rem; padding: 0.5rem 0.75rem; border-radius: var(--radius); font-size: 0.85rem; }
+  .gen-result.success { background: #f0fdf4; border: 1px solid var(--green); }
+  .gen-result.error { background: #fef2f2; border: 1px solid var(--red); }
+  .back-link { display: inline-block; margin-bottom: 1rem; font-size: 0.85rem; color: var(--blue); text-decoration: none; }
+  .back-link:hover { text-decoration: underline; }
+  .topic-list { max-height: 400px; overflow-y: auto; }
+  .topic-list-item { display: flex; justify-content: space-between; padding: 0.35rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
+  .topic-list-item .count { font-weight: 600; color: var(--blue); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>霖楓學苑 — 教師管理後台</h1>
+  <nav>
+    <a href="/" class="back-link" style="color:#fff;opacity:0.75;text-decoration:none;padding:0.4rem 0;">← 學生版</a>
+  </nav>
+</header>
+
+<main>
+  <a href="/" class="back-link">← 返回學生平台</a>
+
+  <div class="stats-grid" id="stats-grid">
+    <div class="loading">載入統計中...</div>
+  </div>
+
+  <div class="teacher-row">
+    <!-- Question Search -->
+    <div class="teacher-panel">
+      <h3>搜尋題目</h3>
+      <div class="form-group">
+        <label>主題</label>
+        <select id="search-topic"><option value="">— 全部 —</option></select>
+      </div>
+      <button class="btn btn-primary btn-sm" id="search-btn">搜尋</button>
+      <div class="result-count" id="result-count"></div>
+      <div class="search-results" id="search-results"></div>
+    </div>
+
+    <!-- Paper Generation -->
+    <div class="teacher-panel">
+      <h3>生成試卷</h3>
+      <div class="form-group">
+        <label>主題</label>
+        <select id="gen-topic"><option value="">— 不限 —</option></select>
+      </div>
+      <div class="form-group">
+        <label>年級 (Form)</label>
+        <select id="gen-form">
+          <option value="">— 不限 —</option>
+          <option value="1">Form 1</option>
+          <option value="2">Form 2</option>
+          <option value="3">Form 3</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>難度</label>
+        <select id="gen-difficulty">
+          <option value="">— 不限 —</option>
+          <option value="Foundation">Foundation</option>
+          <option value="Standard">Standard</option>
+          <option value="Intermediate">Intermediate</option>
+          <option value="Advanced">Advanced</option>
+          <option value="Challenge">Challenge</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>題數 (最多 50)</label>
+        <input type="number" id="gen-num" value="10" min="1" max="50">
+      </div>
+      <button class="btn btn-primary" id="generate-btn">生成試卷 PDF</button>
+      <div class="gen-result" id="gen-result" style="display:none;"></div>
+    </div>
+  </div>
+
+  <!-- Topic Breakdown -->
+  <div class="teacher-panel" style="margin-top:1rem;">
+    <h3>各主題題數分佈</h3>
+    <div class="topic-list" id="topic-list"><div class="loading">載入中...</div></div>
+  </div>
+</main>
+
+<script>
+async function api(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// Load topics for dropdowns
+async function loadTopics() {
+  const topics = await api("/api/topics");
+  const opts = topics.map(t => `<option value="${t}">${t}</option>`).join("");
+  document.getElementById("search-topic").innerHTML = '<option value="">— 全部 —</option>' + opts;
+  document.getElementById("gen-topic").innerHTML = '<option value="">— 不限 —</option>' + opts;
+}
+
+// Load stats
+async function loadStats() {
+  const data = await api("/api/teacher/stats");
+  const grid = document.getElementById("stats-grid");
+  grid.innerHTML = `
+    <div class="stat-card total">
+      <div class="label">總題數</div>
+      <div class="value">${data.total}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">主題數</div>
+      <div class="value">${data.by_topic.length}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">年級組數</div>
+      <div class="value">${data.by_form.length}</div>
+    </div>
+  `;
+
+  const list = document.getElementById("topic-list");
+  list.innerHTML = data.by_topic.map(t =>
+    `<div class="topic-list-item"><span>${t.topic}</span><span class="count">${t.count}</span></div>`
+  ).join("");
+}
+
+// Search questions
+document.getElementById("search-btn").addEventListener("click", async () => {
+  const topic = document.getElementById("search-topic").value;
+  const container = document.getElementById("search-results");
+  const count = document.getElementById("result-count");
+  container.innerHTML = '<div class="loading">搜尋中...</div>';
+  count.textContent = "";
+  try {
+    const qs = await api(`/api/teacher/questions?topic=${encodeURIComponent(topic)}`);
+    count.textContent = `共 ${qs.length} 題`;
+    if (!qs.length) {
+      container.innerHTML = '<div class="empty">無結果</div>';
+      return;
+    }
+    container.innerHTML = qs.map(q => `
+      <div class="search-row">
+        <span class="qid">#${q.id}</span>
+        <strong>${q.question_text.substring(0, 60)}${q.question_text.length > 60 ? '…' : ''}</strong>
+        <div style="color:var(--text-muted);font-size:0.75rem;">
+          Form: ${q.form || '?'} | ${q.difficulty || '?'} | ${q.question_type || '?'} | ${q.marks || 0} 分
+        </div>
+      </div>
+    `).join("");
+  } catch (e) {
+    container.innerHTML = '<div class="empty">載入失敗: ' + e.message + '</div>';
+  }
+});
+
+// Generate paper
+document.getElementById("generate-btn").addEventListener("click", async () => {
+  const result = document.getElementById("gen-result");
+  result.style.display = "none";
+  const btn = document.getElementById("generate-btn");
+  btn.disabled = true;
+  btn.textContent = "生成中...";
+
+  const payload = {
+    topic: document.getElementById("gen-topic").value,
+    form: document.getElementById("gen-form").value,
+    difficulty: document.getElementById("gen-difficulty").value,
+    num_questions: parseInt(document.getElementById("gen-num").value) || 10,
+  };
+
+  try {
+    const res = await fetch("/api/teacher/paper/generate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      result.className = "gen-result success";
+      result.innerHTML = `已生成: <strong>${data.filename}</strong> (${data.questions} 題)<br>
+        <a href="/papers/${encodeURIComponent(data.filename)}" class="btn btn-primary btn-sm" style="display:inline-block;margin-top:0.5rem;" download>下載 PDF</a>`;
+    } else {
+      result.className = "gen-result error";
+      result.textContent = "錯誤: " + (data.error || "未知錯誤");
+    }
+    result.style.display = "block";
+  } catch (e) {
+    result.className = "gen-result error";
+    result.textContent = "請求失敗: " + e.message;
+    result.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "生成試卷 PDF";
+  }
+});
+
+// Init
+loadTopics();
+loadStats();
+</script>
+</body>
+</html>

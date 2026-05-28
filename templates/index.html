@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>霖楓學苑 — 學生練習平台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>霖楓學苑</h1>
+  <nav>
+    <button data-section="topics" class="active">主題瀏覽</button>
+    <button data-section="practice">練習模式</button>
+    <button data-section="progress">進度追蹤</button>
+    <button data-section="papers">試卷下載</button>
+    <button data-section="smart-practice">智慧練習</button>
+	    <button data-section="leaderboard">排行榜</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ====== Topics Section ====== -->
+  <section id="topics" class="section visible">
+    <div class="loading" id="topics-loading">載入中...</div>
+    <div class="topic-grid" id="topic-grid"></div>
+  </section>
+
+  <!-- ====== Practice Section ====== -->
+  <section id="practice" class="section">
+    <div class="practice-controls">
+      <input type="text" id="student-name" class="student-name-input" placeholder="輸入學生姓名" maxlength="50">
+      <select id="practice-topic">
+        <option value="">— 選擇主題 —</option>
+      </select>
+      <button class="btn btn-primary" id="start-practice">開始練習 (5 題)</button>
+	      <button class="btn btn-accent" id="start-daily">每日挑戰 (5 題 + 加分)</button>
+    </div>
+    <div id="questions-container"></div>
+    <div class="score-bar" id="score-bar"></div>
+	    <div class="gami-bar" id="gami-bar" style="display:none"></div>
+  </section>
+
+  <!-- ====== Progress Section ====== -->
+  <section id="progress" class="section">
+    <div class="progress-controls">
+      <input type="text" id="progress-student-name" class="student-name-input" placeholder="輸入學生姓名查詢進度" maxlength="50">
+      <button class="btn btn-primary" id="load-progress">查詢進度</button>
+    </div>
+    <div id="progress-container"></div>
+  </section>
+
+  <!-- ====== Papers Section ====== -->
+  <section id="papers" class="section">
+    <div class="loading" id="papers-loading">載入中...</div>
+    <div class="paper-list" id="paper-list"></div>
+  </section>
+
+  <!-- ====== Leaderboard Section ====== -->
+  <section id="leaderboard" class="section">
+    <div class="loading" id="leaderboard-loading">載入中...</div>
+    <div id="leaderboard-container"></div>
+  </section>
+
+  <!-- ====== Smart Practice Section ====== -->
+  <section id="smart-practice" class="section">
+    <div class="practice-controls">
+      <input type="text" id="smart-student-name" class="student-name-input" placeholder="輸入學生姓名" maxlength="50">
+      <button class="btn btn-primary" id="load-smart">分析弱點並推薦</button>
+    </div>
+    <div id="smart-container"></div>
+  </section>
+</main>
+
+<script>
+// --- Navigation ---
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("visible"));
+    document.getElementById(btn.dataset.section).classList.add("visible");
+    if (btn.dataset.section === "papers") loadPapers();
+    if (btn.dataset.section === "practice") loadTopicsForSelect();
+    if (btn.dataset.section === "leaderboard") loadLeaderboard();
+    if (btn.dataset.section === "progress") { /* user clicks Load button */ }
+    if (btn.dataset.section === "smart-practice") { /* user clicks Load button */ }
+  });
+});
+
+// --- API helpers ---
+async function api(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// --- Student name sync ---
+const nameInput = document.getElementById("student-name");
+const progressNameInput = document.getElementById("progress-student-name");
+const smartNameInput = document.getElementById("smart-student-name");
+nameInput.addEventListener("input", () => { progressNameInput.value = nameInput.value; smartNameInput.value = nameInput.value; });
+progressNameInput.addEventListener("input", () => { nameInput.value = progressNameInput.value; smartNameInput.value = progressNameInput.value; });
+smartNameInput.addEventListener("input", () => { nameInput.value = smartNameInput.value; progressNameInput.value = smartNameInput.value; });
+
+function getStudentName() {
+  const n = nameInput.value.trim();
+  if (!n) { alert("請先輸入學生姓名"); return null; }
+  return n;
+}
+
+// --- Topics ---
+async function loadTopics() {
+  const grid = document.getElementById("topic-grid");
+  const loading = document.getElementById("topics-loading");
+  try {
+    const topics = await api("/api/topics");
+    loading.style.display = "none";
+    if (!topics.length) {
+      grid.innerHTML = '<div class="empty">暫無主題</div>';
+      return;
+    }
+    grid.innerHTML = topics.map(t =>
+      `<div class="topic-card" data-topic="${t}">
+        <div class="name">${t}</div>
+      </div>`
+    ).join("");
+    grid.querySelectorAll(".topic-card").forEach(card => {
+      card.addEventListener("click", () => {
+        document.querySelector("nav button[data-section=practice]").click();
+        document.getElementById("practice-topic").value = card.dataset.topic;
+        startPractice();
+      });
+    });
+  } catch (e) {
+    loading.textContent = "載入失敗: " + e.message;
+  }
+}
+
+// --- Practice ---
+async function loadTopicsForSelect() {
+  const sel = document.getElementById("practice-topic");
+  if (sel.options.length > 1) return;
+  try {
+    const topics = await api("/api/topics");
+    sel.innerHTML = '<option value="">— 選擇主題 —</option>' +
+      topics.map(t => `<option value="${t}">${t}</option>`).join("");
+  } catch (e) { /* ignore */ }
+}
+
+document.getElementById("start-practice").addEventListener("click", startPractice);
+document.getElementById("start-daily").addEventListener("click", startDaily);
+
+let currentQuestions = [];
+let currentScores = [];
+let isDailyMode = false;
+
+async function startPractice() {
+  const topic = document.getElementById("practice-topic").value;
+  if (!topic) return alert("請先選擇主題");
+
+  const container = document.getElementById("questions-container");
+  const scoreBar = document.getElementById("score-bar");
+  container.innerHTML = '<div class="loading">載入題目中...</div>';
+  scoreBar.style.display = "none";
+  currentQuestions = [];
+  currentScores = [];
+
+  try {
+    const qs = await api(`/api/questions?topic=${encodeURIComponent(topic)}&limit=5`);
+    if (!qs.length) {
+      container.innerHTML = '<div class="empty">此主題暫無題目</div>';
+      return;
+    }
+    currentQuestions = qs;
+    currentScores = new Array(qs.length).fill(null);
+    renderQuestions();
+  } catch (e) {
+    container.innerHTML = '<div class="empty">載入失敗: ' + e.message + '</div>';
+  }
+}
+
+async function startDaily() {
+  const studentName = getStudentName();
+  if (!studentName) return;
+
+  const container = document.getElementById("questions-container");
+  const scoreBar = document.getElementById("score-bar");
+  container.innerHTML = '<div class="loading">載入每日挑戰中...</div>';
+  scoreBar.style.display = "none";
+  currentQuestions = [];
+  currentScores = [];
+  isDailyMode = true;
+
+  try {
+    const data = await api("/api/gamification/daily", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ student_name: studentName }),
+    });
+    if (!data.questions.length) {
+      container.innerHTML = '<div class="empty">暫無題目</div>';
+      return;
+    }
+    currentQuestions = data.questions;
+    currentScores = new Array(data.questions.length).fill(null);
+
+    const bonusMsg = data.daily_bonus_claimed
+      ? '<span class="daily-bonus-claimed">🎁 今日獎勵已領取！</span>'
+      : `<span class="daily-progress">今日進度：${data.daily_correct}/${data.daily_target}</span>`;
+
+    container.innerHTML = `
+      <div class="daily-header">
+        <h3>🔥 每日挑戰</h3>
+        ${bonusMsg}
+      </div>
+      <div id="daily-questions"></div>
+    `;
+    const dq = document.getElementById("daily-questions");
+    dq.innerHTML = currentQuestions.map((q, i) => `
+      <div class="question-card" id="q-${i}">
+        <div class="q-header">
+          <span class="q-num">第 ${i + 1} 題</span>
+          <span class="q-meta">${q.topic} · ${q.difficulty || ''} · ${q.question_type || ''} · ${q.marks || 0} 分</span>
+        </div>
+        <div class="q-text">${q.question_text}</div>
+        <input type="text" class="q-answer-input" placeholder="輸入你的答案..." id="input-${i}">
+        <div class="q-actions">
+          <button class="btn btn-primary btn-sm" onclick="submitAnswer(${i})">提交答案</button>
+        </div>
+        <div class="feedback" id="feedback-${i}"></div>
+      </div>
+    `).join("");
+
+    loadGamification(studentName);
+  } catch (e) {
+    container.innerHTML = '<div class="empty">載入失敗: ' + e.message + '</div>';
+  }
+}
+
+function renderQuestions() {
+  const container = document.getElementById("questions-container");
+  container.innerHTML = currentQuestions.map((q, i) => `
+    <div class="question-card" id="q-${i}">
+      <div class="q-header">
+        <span class="q-num">第 ${i + 1} 題</span>
+        <span class="q-meta">${q.topic} · ${q.difficulty || ''} · ${q.question_type || ''} · ${q.marks || 0} 分</span>
+      </div>
+      <div class="q-text">${q.question_text}</div>
+      <input type="text" class="q-answer-input" placeholder="輸入你的答案..." id="input-${i}">
+      <div class="q-actions">
+        <button class="btn btn-primary btn-sm" onclick="submitAnswer(${i})">提交答案</button>
+      </div>
+      <div class="feedback" id="feedback-${i}"></div>
+    </div>
+  `).join("");
+}
+
+async function submitAnswer(i) {
+  const studentName = getStudentName();
+  if (!studentName) return;
+
+  const input = document.getElementById(`input-${i}`).value.trim();
+  const fb = document.getElementById(`feedback-${i}`);
+  const q = currentQuestions[i];
+
+  if (!input) return;
+
+  fb.className = "feedback loading-fb";
+  fb.innerHTML = '<div class="loading-sm">批改中...</div>';
+
+  let result;
+  try {
+    result = await api("/api/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        student_name: studentName,
+        question_id: q.id,
+        answer: input,
+        is_daily: isDailyMode,
+      }),
+    });
+
+    currentScores[i] = { score: result.score, max: result.max_score };
+
+    const statusClass = result.status === "CORRECT" ? "correct" :
+                        result.status === "PARTIAL" ? "partial" : "incorrect";
+    const statusLabel = result.status === "CORRECT" ? "✅ 正確" :
+                        result.status === "PARTIAL" ? "⚠️ 部分正確" : "❌ 不正確";
+
+    fb.className = "feedback " + statusClass;
+    fb.innerHTML = `
+      <div class="fb-status">${statusLabel} — 得分：${result.score_display}</div>
+      <div class="fb-message">${result.message}</div>
+      ${result.hint ? `<div class="fb-hint">💡 提示：${result.hint}</div>` : ""}
+      ${result.related_topics && result.related_topics.length ? `<div class="fb-related">相關主題：${result.related_topics.join("、")}</div>` : ""}
+      ${result.suggested_practice && result.suggested_practice.length ? `<div class="fb-practice">📝 推薦練習題 ID：${result.suggested_practice.join(", ")}</div>` : ""}
+      ${result.status !== "CORRECT" ? `<button class="btn btn-outline btn-sm" style="margin-top:0.5rem" onclick="showSolution(${q.id}, 'feedback-${i}')">💡 顯示解題步驟</button><div class="tutor-solution" id="solution-feedback-${i}" style="display:none"></div>` : ""}
+    `;
+  } catch (e) {
+    fb.className = "feedback incorrect";
+    fb.innerHTML = `<div class="fb-status">❌ 提交失敗</div><div class="fb-message">${e.message}</div>`;
+    currentScores[i] = { score: 0, max: 1 };
+  }
+
+  if (currentScores.filter(s => s !== null).length === currentQuestions.length) {
+    showScore();
+  }
+  if (result.gamification) updateGamiBar(result.gamification);
+}
+
+function showScore() {
+  const totalScore = currentScores.reduce((a, s) => a + (s ? s.score : 0), 0);
+  const totalMax = currentScores.reduce((a, s) => a + (s ? s.max : 0), 0);
+  const pct = totalMax ? Math.round(totalScore / totalMax * 100) : 0;
+  const bar = document.getElementById("score-bar");
+  bar.style.display = "block";
+  bar.innerHTML = `🏆 總分：${totalScore} / ${totalMax}（${pct}%）`;
+}
+
+// --- Progress Dashboard ---
+document.getElementById("load-progress").addEventListener("click", loadProgress);
+
+async function loadProgress() {
+  const studentName = getStudentName();
+  if (!studentName) return;
+
+  const container = document.getElementById("progress-container");
+  container.innerHTML = '<div class="loading">載入進度中...</div>';
+
+  try {
+    const [stats, topics, gdata] = await Promise.all([
+      api(`/api/progress/${encodeURIComponent(studentName)}`),
+      api(`/api/progress/${encodeURIComponent(studentName)}/topics`),
+      api(`/api/gamification/${encodeURIComponent(studentName)}`).catch(() => null),
+    ]);
+
+    if (!stats.total_questions) {
+      container.innerHTML = `<div class="empty">「${studentName}」尚未有任何答題記錄</div>`;
+      return;
+    }
+
+    const correct = stats.by_status["CORRECT"] || 0;
+    const partial = stats.by_status["PARTIAL"] || 0;
+    const review = stats.by_status["REVIEW"] || 0;
+
+    let html = `
+      <div class="progress-summary">
+        <h2>👤 ${studentName} 的學習進度</h2>
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-value">${stats.total_questions}</div>
+            <div class="stat-label">已答題數</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.average_pct}%</div>
+            <div class="stat-label">整體掌握度</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">${stats.total_score} / ${stats.total_max}</div>
+            <div class="stat-label">總得分</div>
+          </div>
+        </div>
+        ${gdata ? `
+        <div class="stats-row">
+          <div class="stat-card" style="background:linear-gradient(135deg,#1e1b4b,#312e81);color:#e0e7ff;border-color:#4338ca">
+            <div class="stat-value" style="color:#fff">${gdata.points}</div>
+            <div class="stat-label" style="color:#a5b4fc">🏆 遊戲化積分</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">🔥 ${gdata.streak}</div>
+            <div class="stat-label">連續正確</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value"><span class="badge-icon ${getBadgeClass(gdata.badge)}">${gdata.badge}</span></div>
+            <div class="stat-label">🎖️ 徽章等級</div>
+          </div>
+        </div>` : ""}
+        <div class="stats-row">
+          <div class="stat-card stat-sm correct-bg">
+            <div class="stat-value">${correct}</div>
+            <div class="stat-label">✅ 正確</div>
+          </div>
+          <div class="stat-card stat-sm partial-bg">
+            <div class="stat-value">${partial}</div>
+            <div class="stat-label">⚠️ 部分</div>
+          </div>
+          <div class="stat-card stat-sm review-bg">
+            <div class="stat-value">${review}</div>
+            <div class="stat-label">🔍 待審</div>
+          </div>
+        </div>
+      </div>
+      <div class="progress-topics">
+        <h2>各主題掌握度</h2>
+    `;
+
+    if (!topics.length) {
+      html += '<div class="empty">暫無主題數據</div>';
+    } else {
+      topics.forEach(t => {
+        let barClass = "bar-low";
+        if (t.mastery_pct >= 80) barClass = "bar-high";
+        else if (t.mastery_pct >= 50) barClass = "bar-mid";
+
+        html += `
+          <div class="topic-progress-row">
+            <div class="topic-progress-label">
+              <span class="tp-name">${t.topic}</span>
+              <span class="tp-count">${t.count} 題</span>
+            </div>
+            <div class="topic-progress-bar-wrap">
+              <div class="topic-progress-bar ${barClass}" style="width:${Math.max(t.mastery_pct, 3)}%"></div>
+            </div>
+            <span class="topic-progress-pct">${t.mastery_pct}%</span>
+          </div>
+        `;
+      });
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+
+  } catch (e) {
+    container.innerHTML = '<div class="empty">載入失敗: ' + e.message + '</div>';
+  }
+}
+
+// --- Papers ---
+async function loadPapers() {
+  const list = document.getElementById("paper-list");
+  const loading = document.getElementById("papers-loading");
+  try {
+    const papers = await api("/api/papers");
+    loading.style.display = "none";
+    if (!papers.length) {
+      list.innerHTML = '<div class="empty">暫無試卷</div>';
+      return;
+    }
+    list.innerHTML = papers.map(p =>
+      `<div class="paper-row">
+        <span class="pname">${p.filename}</span>
+        <span class="psize">${formatSize(p.size)}</span>
+        <a href="/papers/${encodeURIComponent(p.filename)}" class="btn btn-primary btn-sm" download>下載</a>
+      </div>`
+    ).join("");
+  } catch (e) {
+    loading.textContent = "載入失敗: " + e.message;
+  }
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+// --- Smart Practice (Adaptive Engine) ---
+document.getElementById("load-smart").addEventListener("click", loadSmartPractice);
+
+async function loadSmartPractice() {
+  const studentName = smartNameInput.value.trim();
+  if (!studentName) return alert("請先輸入學生姓名");
+
+  const container = document.getElementById("smart-container");
+  container.innerHTML = '<div class="loading">分析學習數據中...</div>';
+
+  try {
+    const data = await api(`/api/adaptive/${encodeURIComponent(studentName)}`);
+    renderSmartPractice(data, container);
+  } catch (e) {
+    container.innerHTML = '<div class="empty">載入失敗: ' + e.message + '</div>';
+  }
+}
+
+function renderSmartPractice(data, container) {
+  const { weak_topics, recommended_difficulty, recommended_questions, progress_summary } = data;
+
+  if (!progress_summary.total_questions) {
+    container.innerHTML = `<div class="empty">「${data.student_name}」尚未有任何答題記錄，無法分析</div>`;
+    return;
+  }
+
+  const trendIcon = progress_summary.trend === "improving" ? "📈 進步中" :
+                    progress_summary.trend === "declining" ? "📉 退步中" : "➡️ 穩定";
+  const diffLabel = recommended_difficulty === "hard" ? "困難" :
+                    recommended_difficulty === "easy" ? "簡單" : "中等";
+
+  let html = `
+    <div class="progress-summary">
+      <h2>🧠 ${data.student_name} 的智慧分析</h2>
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-value">${progress_summary.overall_mastery_pct}%</div>
+          <div class="stat-label">整體掌握度</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${progress_summary.recent_pct}%</div>
+          <div class="stat-label">近期掌握度 (7天)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${trendIcon}</div>
+          <div class="stat-label">學習趨勢</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">${diffLabel}</div>
+          <div class="stat-label">建議難度</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Weak topics
+  html += '<div class="progress-topics"><h2>⚠️ 弱點主題（掌握度 &lt; 60%）</h2>';
+  if (!weak_topics.length) {
+    html += '<div class="empty">🎉 所有主題掌握度均達 60% 以上！</div>';
+  } else {
+    weak_topics.forEach(t => {
+      html += `
+        <div class="topic-progress-row">
+          <div class="topic-progress-label">
+            <span class="tp-name">${t.topic}</span>
+            <span class="tp-count">${t.count} 題</span>
+          </div>
+          <div class="topic-progress-bar-wrap">
+            <div class="topic-progress-bar bar-low" style="width:${Math.max(t.avg_mastery_pct, 3)}%"></div>
+          </div>
+          <span class="topic-progress-pct" style="color:var(--red)">${t.avg_mastery_pct}%</span>
+        </div>
+      `;
+    });
+  }
+  html += '</div>';
+
+  // Recommended questions
+  html += '<div class="progress-topics"><h2>📝 推薦練習題目</h2>';
+  if (!recommended_questions.length) {
+    html += '<div class="empty">暫無可推薦的題目（可能所有弱點主題的題目都已做過）</div>';
+  } else {
+    let smartQuestions = [];
+    let smartScores = new Array(recommended_questions.length).fill(null);
+    html += '<div id="smart-questions-container">';
+    recommended_questions.forEach((q, i) => {
+      html += `
+        <div class="question-card" id="sq-${i}">
+          <div class="q-header">
+            <span class="q-num">推薦 ${i + 1}</span>
+            <span class="q-meta">${q.topic} · ${q.difficulty || ''} · ${q.question_type || ''} · ${q.marks || 0} 分</span>
+          </div>
+          <div class="q-text">${q.question_text}</div>
+          <input type="text" class="q-answer-input" placeholder="輸入你的答案..." id="smart-input-${i}">
+          <div class="q-actions">
+            <button class="btn btn-primary btn-sm" onclick="submitSmartAnswer(${i})">提交答案</button>
+          </div>
+          <div class="feedback" id="smart-feedback-${i}"></div>
+        </div>
+      `;
+    });
+    html += '</div>';
+    window._smartQuestions = recommended_questions;
+    window._smartScores = smartScores;
+  }
+  html += '</div>';
+
+  container.innerHTML = html;
+}
+
+async function submitSmartAnswer(i) {
+  const studentName = smartNameInput.value.trim();
+  if (!studentName) return alert("請先輸入學生姓名");
+
+  const q = window._smartQuestions[i];
+  const input = document.getElementById(`smart-input-${i}`).value.trim();
+  const fb = document.getElementById(`smart-feedback-${i}`);
+  if (!input) return;
+
+  fb.className = "feedback loading-fb";
+  fb.innerHTML = '<div class="loading-sm">批改中...</div>';
+
+  let result;
+  try {
+    result = await api("/api/submit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        student_name: studentName,
+        question_id: q.id,
+        answer: input,
+      }),
+    });
+
+    window._smartScores[i] = { score: result.score, max: result.max_score };
+
+    const statusClass = result.status === "CORRECT" ? "correct" :
+                        result.status === "PARTIAL" ? "partial" : "incorrect";
+    const statusLabel = result.status === "CORRECT" ? "✅ 正確" :
+                        result.status === "PARTIAL" ? "⚠️ 部分正確" : "❌ 不正確";
+
+    fb.className = "feedback " + statusClass;
+    fb.innerHTML = `
+      <div class="fb-status">${statusLabel} — 得分：${result.score_display}</div>
+      <div class="fb-message">${result.message}</div>
+      ${result.hint ? `<div class="fb-hint">💡 提示：${result.hint}</div>` : ""}
+      ${result.status !== "CORRECT" ? `<button class="btn btn-outline btn-sm" style="margin-top:0.5rem" onclick="showSolution(${q.id}, 'smart-feedback-${i}')">💡 顯示解題步驟</button><div class="tutor-solution" id="solution-smart-feedback-${i}" style="display:none"></div>` : ""}
+    `;
+
+    // If all answered, offer to re-analyze
+    const answered = window._smartScores.filter(s => s !== null).length;
+    if (answered === window._smartScores.length) {
+      const container = document.getElementById("smart-container");
+      const reanalyze = document.createElement("div");
+      reanalyze.className = "score-bar";
+      reanalyze.style.display = "block";
+      reanalyze.innerHTML = `✅ 全部完成！<button class="btn btn-primary btn-sm" style="margin-left:1rem" onclick="loadSmartPractice()">重新分析</button>`;
+      container.appendChild(reanalyze);
+    }
+  } catch (e) {
+    fb.className = "feedback incorrect";
+    fb.innerHTML = `<div class="fb-status">❌ 提交失敗</div><div class="fb-message">${e.message}</div>`;
+  }
+  if (result && result.gamification) updateGamiBar(result.gamification);
+}
+
+// --- Tutor Solution ---
+async function showSolution(questionId, feedbackId) {
+  const container = document.getElementById(`solution-${feedbackId}`);
+  if (!container) return;
+
+  // Toggle if already loaded
+  if (container.style.display === "block") {
+    container.style.display = "none";
+    return;
+  }
+  if (container.dataset.loaded === "1") {
+    container.style.display = "block";
+    return;
+  }
+
+  container.style.display = "block";
+  container.innerHTML = '<div class="loading-sm">載入解題步驟中...</div>';
+
+  try {
+    const data = await api(`/api/tutor/solution/${questionId}`);
+    container.dataset.loaded = "1";
+
+    if (data.error) {
+      container.innerHTML = `<div class="fb-hint">無法載入：${data.error}</div>`;
+      return;
+    }
+
+    let html = '<div class="tutor-card">';
+    html += `<div class="tutor-header">📐 逐步解題過程</div>`;
+    html += `<div class="tutor-question">${data.question_text}</div>`;
+    html += '<div class="tutor-steps">';
+
+    data.steps.forEach(s => {
+      html += `
+        <div class="tutor-step">
+          <div class="tutor-step-num">${s.step_number}</div>
+          <div class="tutor-step-body">
+            <div class="tutor-step-desc">${s.description}</div>
+            ${s.expression ? `<div class="tutor-step-expr">${s.expression}</div>` : ""}
+            <div class="tutor-step-explain">${s.explanation}</div>
+          </div>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+
+    if (data.final_answer) {
+      html += `<div class="tutor-answer">✅ 最終答案：<strong>${data.final_answer}</strong></div>`;
+    }
+    if (data.key_concept) {
+      html += `<div class="tutor-concept">📚 關鍵概念：${data.key_concept}</div>`;
+    }
+    if (data.related_topics && data.related_topics.length) {
+      html += `<div class="tutor-related">相關主題：${data.related_topics.join("、")}</div>`;
+    }
+    if (data.suggested_practice && data.suggested_practice.length) {
+      html += `<div class="tutor-practice">📝 推薦練習題 ID：${data.suggested_practice.join(", ")}</div>`;
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = `<div class="fb-hint">載入失敗：${e.message}</div>`;
+  }
+}
+
+// --- Gamification ---
+function getBadgeClass(badge) {
+  const map = { "Bronze": "badge-bronze", "Silver": "badge-silver", "Gold": "badge-gold",
+                "Platinum": "badge-platinum", "Diamond": "badge-diamond" };
+  return map[badge] || "badge-bronze";
+}
+
+function updateGamiBar(gdata) {
+  if (!gdata) return;
+  const bar = document.getElementById("gami-bar");
+  bar.style.display = "flex";
+  bar.innerHTML = `
+    <div class="gami-item">
+      <span class="gami-label">總分</span>
+      <span class="gami-value">${gdata.points}</span>
+    </div>
+    <div class="gami-item">
+      <span class="gami-label">連續</span>
+      <span class="gami-value">🔥 ${gdata.streak}</span>
+    </div>
+    <div class="gami-item">
+      <span class="gami-label">徽章</span>
+      <span class="badge-icon ${getBadgeClass(gdata.badge)}">${gdata.badge}</span>
+    </div>
+    ${gdata.daily_correct !== undefined ? `
+    <div class="gami-item">
+      <span class="gami-label">每日</span>
+      <span class="gami-value">${gdata.daily_correct}/${gdata.daily_target}</span>
+    </div>` : ""}
+    ${gdata.earned ? `<span class="gami-earned">+${gdata.earned}${gdata.bonus ? ` (+${gdata.bonus} 獎勵)` : ""}</span>` : ""}
+  `;
+}
+
+async function loadGamification(studentName) {
+  try {
+    const gdata = await api(`/api/gamification/${encodeURIComponent(studentName)}`);
+    updateGamiBar(gdata);
+  } catch (e) { /* ignore */ }
+}
+
+// --- Leaderboard ---
+async function loadLeaderboard() {
+  const loading = document.getElementById("leaderboard-loading");
+  const container = document.getElementById("leaderboard-container");
+  try {
+    const board = await api("/api/gamification/leaderboard");
+    loading.style.display = "none";
+    if (!board.length) {
+      container.innerHTML = '<div class="empty">尚無排行榜數據 — 快去答題吧！</div>';
+      return;
+    }
+    container.innerHTML = `
+      <div class="leaderboard-table">
+        <table>
+          <thead>
+            <tr>
+              <th>排名</th>
+              <th>學生</th>
+              <th>分數</th>
+              <th>連續</th>
+              <th>徽章</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${board.map(r => `
+              <tr>
+                <td class="rank-cell ${r.rank <= 3 ? 'rank-' + r.rank : ''}">${r.rank <= 3 ? ['','🥇','🥈','🥉'][r.rank] : '#' + r.rank}</td>
+                <td>${r.student_name}</td>
+                <td class="points-cell">${r.points}</td>
+                <td class="streak-cell">${r.streak > 0 ? '🔥 ' + r.streak : '-'}</td>
+                <td><span class="badge-icon ${getBadgeClass(r.badge)}">${r.badge}</span></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  } catch (e) {
+    loading.textContent = "載入失敗: " + e.message;
+  }
+}
+
+// --- Init ---
+loadTopics();
+loadTopicsForSelect();
+</script>
+</body>
+</html>

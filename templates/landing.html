@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HK S1 Math AI · 智能數學練習平台</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,system-ui,sans-serif;background:linear-gradient(135deg,#0f172a,#1e293b);color:#e2e8f0;min-height:100vh}
+.container{max-width:800px;margin:0 auto;padding:40px 20px}
+.hero{text-align:center;padding:60px 0}
+.hero h1{font-size:2.5em;background:linear-gradient(135deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:10px}
+.hero p{font-size:1.2em;color:#94a3b8;margin-bottom:30px}
+.stats{display:flex;justify-content:center;gap:40px;flex-wrap:wrap;margin:40px 0}
+.stat{text-align:center}
+.stat .num{font-size:2em;font-weight:700;color:#60a5fa}
+.stat .label{font-size:.9em;color:#64748b}
+.cta{display:flex;gap:15px;justify-content:center;flex-wrap:wrap}
+.btn{padding:14px 32px;border-radius:12px;font-size:1.1em;font-weight:600;cursor:pointer;border:none;text-decoration:none;display:inline-block}
+.btn-primary{background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff}
+.btn-secondary{background:rgba(255,255,255,.1);color:#e2e8f0;border:1px solid rgba(255,255,255,.2)}
+.btn:hover{transform:translateY(-2px);box-shadow:0 8px 25px rgba(59,130,246,.3)}
+.features{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;margin:60px 0}
+.feature{background:rgba(255,255,255,.05);border-radius:16px;padding:24px;border:1px solid rgba(255,255,255,.1)}
+.feature h3{color:#60a5fa;margin-bottom:8px}
+.feature p{color:#94a3b8;font-size:.95em}
+.footer{text-align:center;padding:40px 0;color:#475569;font-size:.85em}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="hero">
+<h1>🧠 HK S1 Math AI</h1>
+<p>香港中一數學 · AI 智能練習 · 自適應學習 · 即時批改</p>
+<div class="stats">
+<div class="stat"><div class="num">1,409</div><div class="label">題庫</div></div>
+<div class="stat"><div class="num">98.8%</div><div class="label">附答案</div></div>
+<div class="stat"><div class="num">7</div><div class="label">AI 引擎</div></div>
+<div class="stat"><div class="num">S1-S4</div><div class="label">年級</div></div>
+</div>
+<div class="cta">
+<a href="/api/adaptive/demo" class="btn btn-primary">🚀 開始練習</a>
+<a href="#features" class="btn btn-secondary">了解更多</a>
+</div>
+</div>
+
+<div class="features" id="features">
+<div class="feature">
+<h3>🎯 自適應選題</h3>
+<p>根據你的弱點自動推薦最適合的題目，效率提升 3 倍</p>
+</div>
+<div class="feature">
+<h3>🤖 AI 即時批改</h3>
+<p>提交答案即時評分，M/A 雙模式，步驟級反饋</p>
+</div>
+<div class="feature">
+<h3>💡 智能提示</h3>
+<p>5 級漸進提示，卡關時逐步引導，不會直接給答案</p>
+</div>
+<div class="feature">
+<h3>📊 弱點診斷</h3>
+<p>自動偵測你的 misconception，針對性補強</p>
+</div>
+<div class="feature">
+<h3>📝 模擬試卷</h3>
+<p>GHS/DGS 名校真題 + AI 變體生成</p>
+</div>
+<div class="feature">
+<h3>🏆 遊戲化學習</h3>
+<p>成就系統、經驗值、連續打卡，讓學習更有趣</p>
+</div>
+</div>
+
+<div class="footer">
+HK S1 Math AI · Powered by DeepSeek + frellmapi + Claude · 霖楓學苑 LF Academy
+</div>
+</div>
+</body>
+</html>

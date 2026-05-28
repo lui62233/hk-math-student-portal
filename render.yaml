@@ -1,0 +1,29 @@
+{
+  "services": [
+    {
+      "type": "web",
+      "name": "hk-math-portal",
+      "env": "python",
+      "buildCommand": "pip install -r requirements.txt",
+      "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120",
+      "envVars": [
+        {
+          "key": "PYTHON_VERSION",
+          "value": "3.11"
+        },
+        {
+          "key": "DATABASE_URL",
+          "value": "postgresql://user:pass@host:5432/question_bank"
+        },
+        {
+          "key": "FRELLMAPI_KEY",
+          "value": "frellmapi-a4fc69d7fa5ca8504930131b70d7b0cfdf6d0b09abe941ce"
+        },
+        {
+          "key": "FRELLMAPI_URL",
+          "value": "http://localhost:3001/v1"
+        }
+      ]
+    }
+  ]
+}
