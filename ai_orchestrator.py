@@ -7,7 +7,7 @@ def smart_pipeline(student_name, question_id, student_answer, conn):
 
     # Step 1: Mark the answer
     import sys
-    sys.path.insert(0, r"D:\S1\_question_bank")
+    # QB modules now in same directory for deployment
     from mark_engine import mark_with_feedback
     mark_result = mark_with_feedback(student_answer, int(question_id))
     result["mark"] = {

@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import Flask, jsonify, request, send_file, render_template
 
 # Allow importing from question_bank
-sys.path.insert(0, r"D:\S1\_question_bank")
+sys.path.insert(0, r".")
 
 from adaptive_engine import get_next_question
 from tutor_engine import get_hint, get_next_hint
@@ -18,7 +18,7 @@ from ai_orchestrator import smart_pipeline
 app = Flask(__name__)
 
 PAPERS_DIR = r"D:\S1\_generated_papers\pdf"
-BANK_PATH = r"D:\S1\_question_bank\FINAL_MEGA_BANK.json"
+BANK_PATH = r".\FINAL_MEGA_BANK.json"
 
 
 def get_db():
@@ -565,7 +565,7 @@ def tutor_next_hint():
 # ===== Marking & Feedback Engine =====
 
 import sys
-sys.path.insert(0, r"D:\S1\_question_bank")
+sys.path.insert(0, r".")
 from mark_engine import mark_answer, mark_with_feedback
 
 @app.route("/api/mark", methods=["POST"])

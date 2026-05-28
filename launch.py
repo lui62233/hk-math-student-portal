@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Add project root and question_bank to path
 sys.path.insert(0, str(Path(__file__).parent))
-sys.path.insert(0, r"D:\S1\_question_bank")
+sys.path.insert(0, r".")
 
 from app import app
 
