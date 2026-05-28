@@ -9,6 +9,43 @@ from flask import Flask, jsonify, request, send_file, render_template
 # Allow importing from question_bank
 sys.path.insert(0, r".")
 
+# === frellmapi Configuration (with fallback) ===
+import os, urllib.request, json
+
+FRELLMAPI_URL = os.environ.get("FRELLMAPI_URL", "http://localhost:3001/v1")
+FRELLMAPI_KEY = os.environ.get("FRELLMAPI_KEY", "freellmapi-a4fc69d7fa5ca8504930131b70d7b0cfdf6d0b09abe941ce")
+FRELLMAPI_AVAILABLE = False
+
+def check_frellmapi():
+    """Check if frellmapi is reachable. If not, use smart fallbacks."""
+    global FRELLMAPI_AVAILABLE
+    try:
+        req = urllib.request.Request(f"{FRELLMAPI_URL}/models",
+            headers={"Authorization": f"Bearer {FRELLMAPI_KEY}"})
+        urllib.request.urlopen(req, timeout=3)
+        FRELLMAPI_AVAILABLE = True
+        print(f"[OK] frellmapi connected: {FRELLMAPI_URL}")
+    except:
+        FRELLMAPI_AVAILABLE = False
+        print(f"[WARN] frellmapi unavailable at {FRELLMAPI_URL} — using smart fallbacks")
+
+def fre_call(prompt, timeout=15):
+    """Call frellmapi with fallback to None on failure."""
+    if not FRELLMAPI_AVAILABLE:
+        return None
+    try:
+        body = json.dumps({"messages":[{"role":"user","content":prompt}]}).encode()
+        req = urllib.request.Request(f"{FRELLMAPI_URL}/chat/completions", data=body,
+            headers={"Authorization": f"Bearer {FRELLMAPI_KEY}", "Content-Type": "application/json"})
+        resp = urllib.request.urlopen(req, timeout=timeout)
+        return json.loads(resp.read())["choices"][0]["message"]["content"]
+    except:
+        return None
+
+check_frellmapi()
+# === End frellmapi config ===
+
+
 from adaptive_engine import get_next_question
 from tutor_engine import get_hint, get_next_hint
 from gamification import ensure_table, update_gamification, get_gamification, get_leaderboard
