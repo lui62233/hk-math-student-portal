@@ -4,7 +4,7 @@
       "type": "web",
       "name": "hk-math-portal",
       "env": "python",
-      "buildCommand": "pip install -r requirements.txt && python migrate_render.py",
+      "buildCommand": "pip install -r requirements.txt",
       "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120",
       "envVars": [
         {
@@ -26,7 +26,8 @@
             "property": "connectionString"
           }
         }
-      ]
+      ],
+      "preDeployCommand": "python migrate_render.py"
     }
   ],
   "databases": [
